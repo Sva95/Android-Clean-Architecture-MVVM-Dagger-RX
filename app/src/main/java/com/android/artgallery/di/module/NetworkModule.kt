@@ -20,6 +20,7 @@ import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.adapter.rxjava2.RxJava2CallAdapterFactory
 import retrofit2.converter.gson.GsonConverterFactory
+import java.io.IOException
 import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
 
@@ -43,7 +44,7 @@ class NetworkModule {
 
     @Provides
     @Singleton
-    fun providesOkHttpClient(context: Context,isNetworkAvailable:Boolean): OkHttpClient {
+    fun providesOkHttpClient(context: Context, isNetworkAvailable: Boolean): OkHttpClient {
         val cacheSize = (5 * 1024 * 1024).toLong()
         val mCache = Cache(context.cacheDir, cacheSize)
         val interceptor = HttpLoggingInterceptor()
@@ -55,23 +56,41 @@ class NetworkModule {
             .readTimeout(60, TimeUnit.SECONDS)
             .addNetworkInterceptor(interceptor)
             .addInterceptor { chain ->
+                if (!isConnected(context = context)) {
+                    throw IOException()
+                }
+                val request = chain.request()
+                chain.proceed(request)
+            }
+            .addInterceptor { chain ->
                 var request = chain.request()
                 /* If there is Internet, get the cache that was stored 5 seconds ago.
                  * If the cache is older than 5 seconds, then discard it,
                  * and indicate an error in fetching the response.
                  * The 'max-age' attribute is responsible for this behavior.
                  */
-                request = if (isNetworkAvailable) request.newBuilder().header("Cache-Control", "public, max-age=" + 5).build()
+                request = if (isNetworkAvailable) request.newBuilder()
+                    .header("Cache-Control", "public, max-age=" + 5).build()
                 /*If there is no Internet, get the cache that was stored 7 days ago.
                  * If the cache is older than 7 days, then discard it,
                  * and indicate an error in fetching the response.
                  * The 'max-stale' attribute is responsible for this behavior.
                  * The 'only-if-cached' attribute indicates to not retrieve new data; fetch the cache only instead.
                  */
-                else request.newBuilder().header("Cache-Control", "public, only-if-cached, max-stale=" + 60 * 60 * 24 * 7).build()
+                else request.newBuilder().header(
+                    "Cache-Control",
+                    "public, only-if-cached, max-stale=" + 60 * 60 * 24 * 7
+                ).build()
                 chain.proceed(request)
             }
         return client.build()
+    }
+
+    fun isConnected(context: Context): Boolean {
+        val connectivityManager =
+            context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val netInfo = connectivityManager.activeNetworkInfo
+        return netInfo != null && netInfo.isConnected
     }
 
 
@@ -96,7 +115,8 @@ class NetworkModule {
     @Provides
     @Singleton
     fun provideIsNetworkAvailable(context: Context): Boolean {
-        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val connectivityManager =
+            context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val activeNetwork: NetworkInfo? = connectivityManager.activeNetworkInfo
         return activeNetwork != null && activeNetwork.isConnected
     }
@@ -109,15 +129,19 @@ class NetworkModule {
 
     @Singleton
     @Provides
-    fun provideAlbumRepository(appDatabase: AppDatabase,
-                                 retrofitService: RetrofitService): AlbumRepository {
-        return AlbumRepositoryImp(appDatabase,retrofitService)
+    fun provideAlbumRepository(
+        appDatabase: AppDatabase,
+        retrofitService: RetrofitService
+    ): AlbumRepository {
+        return AlbumRepositoryImp(appDatabase, retrofitService)
     }
 
     @Singleton
     @Provides
-    fun providePhotoRepository(appDatabase: AppDatabase,
-                               retrofitService: RetrofitService): PhotoRepository {
-        return PhotoRepositoryImp(appDatabase,retrofitService)
+    fun providePhotoRepository(
+        appDatabase: AppDatabase,
+        retrofitService: RetrofitService
+    ): PhotoRepository {
+        return PhotoRepositoryImp(appDatabase, retrofitService)
     }
 }

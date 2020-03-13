@@ -17,9 +17,10 @@
 
 
     <FrameLayout
-            android:layout_below="@id/gallery_header_icon_image_view"
             android:id="@+id/gallery_container"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"/>
+            android:layout_height="match_parent"
+            android:layout_below="@id/gallery_header_icon_image_view"
+            android:layout_marginTop="8dp" />
 
 </RelativeLayout>
